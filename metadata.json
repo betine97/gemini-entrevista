@@ -1,0 +1,8 @@
+{
+  "name": "TechPrep.AI",
+  "description": "Simulador de entrevista técnica profissional com IA Senior. Treine suas habilidades em Frontend, Backend e System Design.",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "prompt": ""
+}
