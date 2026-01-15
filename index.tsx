@@ -587,6 +587,66 @@ Frase corrigida:`;
     }
   }
 
+  // Detecta se um entrevistador está chamando o outro pelo nome
+  private detectCallingOtherInterviewer(text: string, otherName: string): boolean {
+    const lowerText = text.toLowerCase();
+    const lowerName = otherName.toLowerCase();
+    
+    // Padrões que indicam que está chamando o outro entrevistador
+    const callingPatterns = [
+      // Chamada direta pelo nome
+      new RegExp(`\\b${lowerName}\\b.*\\?`, 'i'),  // "Elena, o que você acha?"
+      new RegExp(`\\b${lowerName}\\b,`, 'i'),       // "Elena, ..."
+      new RegExp(`o que.*${lowerName}`, 'i'),      // "o que a Elena acha"
+      new RegExp(`${lowerName}.*pode`, 'i'),       // "Elena pode comentar"
+      new RegExp(`${lowerName}.*quer`, 'i'),       // "Elena quer adicionar"
+      new RegExp(`passo.*${lowerName}`, 'i'),      // "passo para a Elena"
+      new RegExp(`passa.*${lowerName}`, 'i'),      // "passa para a Elena"
+      new RegExp(`vez.*${lowerName}`, 'i'),        // "vez da Elena"
+      new RegExp(`${lowerName}.*vez`, 'i'),        // "Elena, sua vez"
+      new RegExp(`com você.*${lowerName}`, 'i'),   // "com você, Elena"
+      new RegExp(`${lowerName}.*gostaria`, 'i'),   // "Elena gostaria de perguntar"
+      new RegExp(`${lowerName}.*alguma`, 'i'),     // "Elena, alguma pergunta?"
+    ];
+    
+    // Frases comuns de passagem de turno
+    const turnPhrases = [
+      'sua vez',
+      'pode continuar',
+      'quer complementar',
+      'quer adicionar',
+      'o que você acha',
+      'alguma pergunta',
+      'gostaria de perguntar',
+      'pode fazer uma pergunta',
+      'passo a palavra',
+      'passo para você',
+    ];
+    
+    // Verificar se menciona o nome do outro
+    const mentionsName = lowerText.includes(lowerName);
+    
+    // Verificar padrões de chamada
+    for (const pattern of callingPatterns) {
+      if (pattern.test(text)) {
+        console.log(`🔍 [DETECT] Padrão de chamada detectado: ${pattern}`);
+        return true;
+      }
+    }
+    
+    // Verificar se menciona o nome junto com frases de passagem de turno
+    if (mentionsName) {
+      for (const phrase of turnPhrases) {
+        if (lowerText.includes(phrase)) {
+          console.log(`🔍 [DETECT] Nome + frase de turno: "${otherName}" + "${phrase}"`);
+          return true;
+        }
+      }
+    }
+    
+    return false;
+  }
+
 
   private async generateScript() {
     console.log('📋 [SCRIPT] Gerando roteiro da entrevista...');
@@ -938,10 +998,29 @@ Frase corrigida:`;
                 .filter(p => p)[otherSessionIndex];
               
               if (otherSession && otherPersona) {
+                // DETECÇÃO DE CHAMADA: Verificar se este entrevistador está chamando o outro
+                const calledOther = this.detectCallingOtherInterviewer(reconstructedText, otherPersona.name);
+                
                 otherSession.then((s: any) => {
-                  const transcriptionMessage = `[CONTEXTO] ${personaName} acabou de dizer: "${reconstructedText}". Você (${otherPersona.name}) está acompanhando a conversa mas não deve responder a menos que seja chamado diretamente ou seja sua vez de fazer perguntas.`;
-                  s.send(transcriptionMessage);
-                  console.log(`📤 [${timestamp}] [TRANSCRIPTION] Enviado para ${otherPersona.name}: ${transcriptionMessage.substring(0, 80)}...`);
+                  if (calledOther) {
+                    // O entrevistador atual CHAMOU o outro - ativar a sessão do outro
+                    console.log(`🎯 [${timestamp}] [CALL-DETECTED] ${personaName} chamou ${otherPersona.name}!`);
+                    
+                    // Alternar sessão ativa para o entrevistador chamado
+                    const previousActive = this.activeSessionIndex;
+                    this.activeSessionIndex = otherSessionIndex;
+                    console.log(`🔀 [${timestamp}] [SWITCH] Sessão ativa: ${previousActive} → ${this.activeSessionIndex} (${otherPersona.name} foi chamado)`);
+                    
+                    // Enviar mensagem especial indicando que foi chamado e DEVE responder
+                    const callMessage = `[CHAMADO] ${personaName} acabou de te chamar diretamente: "${reconstructedText}". VOCÊ DEVE RESPONDER AGORA! É sua vez de falar.`;
+                    s.send(callMessage);
+                    console.log(`📢 [${timestamp}] [CALL] Enviado para ${otherPersona.name}: ${callMessage.substring(0, 80)}...`);
+                  } else {
+                    // Mensagem normal de contexto
+                    const transcriptionMessage = `[CONTEXTO] ${personaName} acabou de dizer: "${reconstructedText}". Você (${otherPersona.name}) está acompanhando a conversa mas não deve responder a menos que seja chamado diretamente ou seja sua vez de fazer perguntas.`;
+                    s.send(transcriptionMessage);
+                    console.log(`📤 [${timestamp}] [TRANSCRIPTION] Enviado para ${otherPersona.name}: ${transcriptionMessage.substring(0, 80)}...`);
+                  }
                 }).catch((err: any) => {
                   console.error(`❌ [TRANSCRIPTION-ERROR] Erro ao enviar transcrição:`, err);
                 });
